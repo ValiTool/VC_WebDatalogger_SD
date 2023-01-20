@@ -41,13 +41,51 @@ ESP32WebServer server(80);
 const char* ssid = "WiFi_Fibertel_mev_2.4GHz";
 const char* password = "x43c7765bs";
 
-#define servername "MCserver" //Define the name to your server... 
+#define servername "VCServer" //Define the name to your server... 
 //#define SD_pin 16 //G16 in my case
 
 bool   SD_present = false; //Controls if the SD card is present or not
 
-// Functions
+/*********  SETUP  **********/
 
+void setup(void)
+{  
+  Serial.begin(115200);
+  
+  initWiFi();
+  initSDCard();
+  
+  //Set your preferred server name, if you use "mcserver" the address would be http://mcserver.local/
+  if (!MDNS.begin(servername)) 
+  {          
+    Serial.println(F("Error setting up MDNS responder!")); 
+    ESP.restart(); 
+  }
+
+  /*********  Server Commands  **********/
+  server.on("/",         SD_dir);
+  server.on("/upload",   File_Upload);
+  server.on("/fupload",  HTTP_POST,[](){ server.send(200);}, handleFileUpload);
+
+  server.begin();
+  
+  Serial.println("HTTP server started");
+}
+
+/*********  LOOP  **********/
+
+void loop(void)
+{
+  server.handleClient(); //Listen for client connections
+
+
+
+
+}
+
+/*********  FUNCTIONS  **********/
+
+//SD-Card Inicialization
 void initSDCard(){
   if(!SD.begin()){
     Serial.println("Card Mount Failed");
@@ -78,6 +116,7 @@ void initSDCard(){
   Serial.printf("SD Card Size: %lluMB\n", cardSize);
 }
 
+//Wi-Fi Inicialization
 void initWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -89,58 +128,6 @@ void initWiFi() {
   Serial.println(WiFi.localIP());
 }
 
-/*********  SETUP  **********/
-
-void setup(void)
-{  
-  Serial.begin(115200);
-  
-  initWiFi();
-  initSDCard();
-  
-  //Set your preferred server name, if you use "mcserver" the address would be http://mcserver.local/
-  if (!MDNS.begin(servername)) 
-  {          
-    Serial.println(F("Error setting up MDNS responder!")); 
-    ESP.restart(); 
-  } 
-
-  
-  //OLD SD INIT
-  /*
-  Serial.print(F("Initializing SD card..."));
-  
-  //see if the card is present and can be initialised.
-  //Note: Using the ESP32 and SD_Card readers requires a 1K to 4K7 pull-up to 3v3 on the MISO line, otherwise may not work
-  if (!SD.begin())
-  { 
-    Serial.println(F("Card failed or not present, no SD Card data logging possible..."));
-    SD_present = false; 
-  } 
-  else
-  {
-    Serial.println(F("Card initialised... file access enabled..."));
-    SD_present = true; 
-  } */
-  
-  /*********  Server Commands  **********/
-  server.on("/",         SD_dir);
-  server.on("/upload",   File_Upload);
-  server.on("/fupload",  HTTP_POST,[](){ server.send(200);}, handleFileUpload);
-
-  server.begin();
-  
-  Serial.println("HTTP server started");
-}
-
-/*********  LOOP  **********/
-
-void loop(void)
-{
-  server.handleClient(); //Listen for client connections
-}
-
-/*********  FUNCTIONS  **********/
 //Initial page of the server web, list directory and give you the chance of deleting and uploading
 void SD_dir()
 {
