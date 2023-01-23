@@ -129,7 +129,7 @@ while(!timeClient.update()) {
   if(minSecStamp == "00:00"||minSecStamp == "20:00"||minSecStamp == "40:00"){ //20 minute interval sample, A little "hard-coded" but I didn´t want to rely on millis() to trigger the sensors.
     //Here goes the data update from the sensors.
     Serial.println("SAMPLE");
-    appendFile(SD,newFileName,formattedDate);
+    appendFile(SD,newFileName,formattedDate + "/n");
     }
   delay(1000);
 }
