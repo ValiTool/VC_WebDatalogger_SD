@@ -56,11 +56,11 @@ NTPClient timeClient(ntpUDP, "0.ubnt.pool.ntp.org", -10800, 60000);
 
 //Variables:
 bool   SD_present = false; //Controls if the SD card is present or not
-char lastDay [30] = "2023-01-19"; //Initial value, meant to compare the date, in order to create date-based instructions, i.e: Creating a new file on the SD when the Day changes, in order to maintain the data sorted.
-char dayStamp [30] = "2023-01-19"; //Probably could remove some of these variables, to further improvement.
-char minSecStamp [10]= "00:00";
-char newFileName [30] = "2023-01-19";
-char formattedDate [30]= "";
+String lastDay = "2023-01-19"; //Initial value, meant to compare the date, in order to create date-based instructions, i.e: Creating a new file on the SD when the Day changes, in order to maintain the data sorted.
+String dayStamp = "2023-01-19"; //Probably could remove some of these variables, to further improvement.
+String minSecStamp = "00:00";
+String newFileName = "2023-01-19";
+String formattedDate = "";
 
 
 /*********  SETUP  **********/
@@ -99,11 +99,13 @@ void loop(void)
 ////////////NTP Functions////////////
 
 while(!timeClient.update()) {
-    timeClient.forceUpdate();}
+    timeClient.forceUpdate();
+    }
 
   //Date extract from the FormattedDate method
   
-  formattedDate =timeClient.getFormattedDate().toCharArray(buf,timeClient.getFormattedDate().length() + 1 ) ;
+  formattedDate = timeClient.getFormattedDate();
+
   int splitT = formattedDate.indexOf("T"); //This line finds the index position when the Date ends.
   dayStamp = formattedDate.substring(0,splitT); //The method "substring" extracts a portion of the string value at a given index range.
 
@@ -111,12 +113,12 @@ while(!timeClient.update()) {
   minSecStamp = formattedDate.substring(splitT+4,formattedDate.length()-1);
   Serial.println(minSecStamp);
   
-  if (!lastDay.equals(dayStamp)){ //If Statement, used to create a Date-triggered instruction, i.e, creating a new SD Datalogging file every time the day changes.
+  if (!lastDay.equals(dayStamp)){ //If the day changes, creates a new File in the SD Card.
     
     Serial.println("New File"); //Here goes the instruction, in this case only prints on the Serial for debbuging reasons.
     lastDay = dayStamp; //Update the variable used to compare.
-    newFileName = strcat("/", lastDay, ".txt");
-    writeFile(SD,newFileName,"Mediciones del día:"+lastDay+ "\n");
+    newFileName = "/" + lastDay + ".txt";
+    writeFile(SD,newFileName,"Mediciones del día: "+lastDay+ "\n");
     }
     else{
       Serial.println("Same File");
@@ -166,7 +168,7 @@ void initSDCard(){
 }
 
 //Write File in the SD, the arguments are: path SD, path of the file i.e /text.txt, content to write.
-void writeFile(fs::FS &fs, const char * path, const char * message){
+void writeFile(fs::FS &fs, String path, String message){
   Serial.printf("Writing file: %s\n", path);
 
   File file = fs.open(path, FILE_WRITE);
@@ -183,7 +185,7 @@ void writeFile(fs::FS &fs, const char * path, const char * message){
 }
 
 //Append content into an existent file
-void appendFile(fs::FS &fs, const char * path, const char * message){
+void appendFile(fs::FS &fs, String path, String message){
   Serial.printf("Appending to file: %s\n", path);
 
   File file = fs.open(path, FILE_APPEND);
