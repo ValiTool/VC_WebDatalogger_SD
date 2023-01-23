@@ -26,25 +26,42 @@
  See more at http://www.dsbird.org.uk
  
 */
-
-#include <WiFi.h>              //Built-in
+//Libraries
+#include <WiFi.h> //Built-in
+#include <WiFiUdp.h>             
 #include <ESP32WebServer.h>    //https://github.com/Pedroalbuquerque/ESP32WebServer download and place in your Libraries folder
 #include <ESPmDNS.h>
-
-#include "CSS.h" //Includes headers of the web and de style file
+#include <FS.h>
 #include <SD.h> 
 #include <SPI.h>
+#include <NTPClient.h>
+//CSS Headers
+#include "CSS.h" //Includes headers of the web and de style file
 
-ESP32WebServer server(80);
+ESP32WebServer server(80); //Starts the web server at port 80, you can change this value if the port is unavalible.
 
 //Wi Fi Credentials
 const char* ssid = "WiFi_Fibertel_mev_2.4GHz";
 const char* password = "x43c7765bs";
 
-#define servername "VCServer" //Define the name to your server... 
+WiFiUDP ntpUDP;
+
+#define servername "MCserver" //Define the name to your server...
+
+// You can specify the time server pool and the offset (in seconds, can be
+// changed later with setTimeOffset() ). Additionally you can specify the
+// update interval (in milliseconds, can be changed using setUpdateInterval() ).
+NTPClient timeClient(ntpUDP, "0.ubnt.pool.ntp.org", -10800, 60000);
 //#define SD_pin 16 //G16 in my case
 
+//Variables:
 bool   SD_present = false; //Controls if the SD card is present or not
+char lastDay [30] = "2023-01-19"; //Initial value, meant to compare the date, in order to create date-based instructions, i.e: Creating a new file on the SD when the Day changes, in order to maintain the data sorted.
+char dayStamp [30] = "2023-01-19"; //Probably could remove some of these variables, to further improvement.
+char minSecStamp [10]= "00:00";
+char newFileName [30] = "2023-01-19";
+char formattedDate [30]= "";
+
 
 /*********  SETUP  **********/
 
@@ -79,8 +96,40 @@ void loop(void)
   server.handleClient(); //Listen for client connections
 
 
+////////////NTP Functions////////////
 
+while(!timeClient.update()) {
+    timeClient.forceUpdate();}
 
+  //Date extract from the FormattedDate method
+  
+  formattedDate =timeClient.getFormattedDate().toCharArray(buf,timeClient.getFormattedDate().length() + 1 ) ;
+  int splitT = formattedDate.indexOf("T"); //This line finds the index position when the Date ends.
+  dayStamp = formattedDate.substring(0,splitT); //The method "substring" extracts a portion of the string value at a given index range.
+
+  //Minute extract, used to avoid the delay() function.
+  minSecStamp = formattedDate.substring(splitT+4,formattedDate.length()-1);
+  Serial.println(minSecStamp);
+  
+  if (!lastDay.equals(dayStamp)){ //If Statement, used to create a Date-triggered instruction, i.e, creating a new SD Datalogging file every time the day changes.
+    
+    Serial.println("New File"); //Here goes the instruction, in this case only prints on the Serial for debbuging reasons.
+    lastDay = dayStamp; //Update the variable used to compare.
+    newFileName = strcat("/", lastDay, ".txt");
+    writeFile(SD,newFileName,"Mediciones del día:"+lastDay+ "\n");
+    }
+    else{
+      Serial.println("Same File");
+      }
+  
+//Sensors info update and write to the SD Card.
+  
+  if(minSecStamp == "00:00"||minSecStamp == "20:00"||minSecStamp == "40:00"){ //20 minute interval sample, A little "hard-coded" but I didn´t want to rely on millis() to trigger the sensors.
+    //Here goes the data update from the sensors.
+    Serial.println("SAMPLE");
+    appendFile(SD,newFileName,formattedDate);
+    }
+  delay(1000);
 }
 
 /*********  FUNCTIONS  **********/
@@ -114,6 +163,40 @@ void initSDCard(){
   }
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   Serial.printf("SD Card Size: %lluMB\n", cardSize);
+}
+
+//Write File in the SD, the arguments are: path SD, path of the file i.e /text.txt, content to write.
+void writeFile(fs::FS &fs, const char * path, const char * message){
+  Serial.printf("Writing file: %s\n", path);
+
+  File file = fs.open(path, FILE_WRITE);
+  if(!file){
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+  if(file.print(message)){
+    Serial.println("File written");
+  } else {
+    Serial.println("Write failed");
+  }
+  file.close();
+}
+
+//Append content into an existent file
+void appendFile(fs::FS &fs, const char * path, const char * message){
+  Serial.printf("Appending to file: %s\n", path);
+
+  File file = fs.open(path, FILE_APPEND);
+  if(!file){
+    Serial.println("Failed to open file for appending");
+    return;
+  }
+  if(file.print(message)){
+    Serial.println("Message appended");
+  } else {
+    Serial.println("Append failed");
+  }
+  file.close();
 }
 
 //Wi-Fi Inicialization
