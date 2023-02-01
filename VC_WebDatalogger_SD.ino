@@ -46,7 +46,13 @@ const char* password = "x43c7765bs";
 
 WiFiUDP ntpUDP;
 
-#define servername "MCserver" //Define the name to your server...
+#define servername "mcserver" //Define the name to your server...
+
+/*PIN Asignmment*/
+
+#define currentSensorPin 32
+#define voltageSensorPin 33
+
 
 // You can specify the time server pool and the offset (in seconds, can be
 // changed later with setTimeOffset() ). Additionally you can specify the
@@ -54,13 +60,24 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "0.ubnt.pool.ntp.org", -10800, 60000);
 //#define SD_pin 16 //G16 in my case
 
+//Constants
+float voltageCalib = 0.138;
+float sensitivity = 0.033; // V/A (Sensor sensitivity), the original sensor has a sensit = 0.066 V/A, but because the ACS712 ouput is 5V max, a Voltage Divider is used in order to protect the max 3.3v input of the ESP32, so the sensitivity also is cut to half.
+//float currentSensorOffset = 1.25;
+float currentSensorOffset = 1.07; 
+double R1_V = 68000; // R1 from voltage divisor, 68kOhm. If you can measure the REAL values of the resistance, replace it here for more accuarcy.
+double R2_V = 6800; // R2 from the voltage divisor, 6.8kOhm.
+
 //Variables:
 bool   SD_present = false; //Controls if the SD card is present or not
 String lastDay = "2023-01-19"; //Initial value, meant to compare the date, in order to create date-based instructions, i.e: Creating a new file on the SD when the Day changes, in order to maintain the data sorted.
 String dayStamp = "2023-01-19"; //Probably could remove some of these variables, to further improvement.
+String hourStamp = "00";
 String minSecStamp = "00:00";
 String newFileName = "2023-01-19";
 String formattedDate = "";
+
+
 
 
 /*********  SETUP  **********/
@@ -91,10 +108,10 @@ void setup(void)
 
 /*********  LOOP  **********/
 
-void loop(void)
-{
+void loop(void){
+////*Server handle*/
+  
   server.handleClient(); //Listen for client connections
-
 
 ////////////NTP Functions////////////
 
@@ -102,16 +119,19 @@ while(!timeClient.update()) {
     timeClient.forceUpdate();
     }
 
-  //Date extract from the FormattedDate method
+  //Date extract from the FormattedDate method, raw String: 2023-01-24T21:40:00Z
   
   formattedDate = timeClient.getFormattedDate();
 
   int splitT = formattedDate.indexOf("T"); //This line finds the index position when the Date ends.
   dayStamp = formattedDate.substring(0,splitT); //The method "substring" extracts a portion of the string value at a given index range.
 
-  //Minute extract, used to avoid the delay() function.
+  //Hour extract
+  hourStamp = formattedDate.substring(splitT+1,splitT+3);
+  
+  //Minute-Sec extract, used to avoid the delay() function.
   minSecStamp = formattedDate.substring(splitT+4,formattedDate.length()-1);
-  Serial.println(minSecStamp);
+  
   
   if (!lastDay.equals(dayStamp)){ //If the day changes, creates a new File in the SD Card.
     
@@ -123,19 +143,84 @@ while(!timeClient.update()) {
     else{
       Serial.println("Same File");
       }
+/*Debbuging-Uncomment when everything is ready*/
   
+  float voltage = abs(return_voltage_value(voltageSensorPin));
+  float current = abs(return_current_value(currentSensorPin));
+  Serial.println("Medición: " + dayStamp + " " + hourStamp + " " + minSecStamp);
+  Serial.print("Voltage: ");
+  Serial.println(voltage);
+  Serial.print("Intensidad: ");
+  Serial.println(current);
+
+
 //Sensors info update and write to the SD Card.
   
   if(minSecStamp == "00:00"||minSecStamp == "20:00"||minSecStamp == "40:00"){ //20 minute interval sample, A little "hard-coded" but I didn´t want to rely on millis() to trigger the sensors.
     //Here goes the data update from the sensors.
     Serial.println("SAMPLE");
-    appendFile(SD,newFileName,formattedDate + " /n");
+    appendFile(SD,newFileName,dayStamp + " " + hourStamp + ":" + minSecStamp + " " + voltage + " " + current + "\n");
     }
   delay(1000);
-}
+} 
+/*END LOOP*/
 
 /*********  FUNCTIONS  **********/
 
+
+/********* Sensors Functions **********/
+
+double return_voltage_value(int pin_no)
+{
+  double tmp = 0;
+  double ADCVoltage = 0;
+  double inputVoltage = 0;
+  double avg = 0;
+  for (int i = 0; i < 150; i++)
+  {
+    tmp = tmp + analogRead(pin_no);
+  }
+  avg = tmp / 150;
+  ADCVoltage = ((avg * 3.3) / (4095)) + voltageCalib; //Serial to voltage conversion. Voltage sensed in the ADC IOpin.
+  inputVoltage = ADCVoltage / (R2_V / (R1_V + R2_V)); // formula for calculating voltage in i.e. GND
+  return inputVoltage;
+}
+double return_current_value(int pin_no)
+{
+  double tmp = 0;
+  double avg = 0;
+  double ADCVoltage = 0;
+  double amps = 0;
+  for (int z = 0; z < 150; z++)
+  {
+    tmp = tmp + analogRead(pin_no);
+  }
+  avg = tmp / 150;
+  ADCVoltage = ((avg / 4095.0) * 3.3); // Gets you mV
+  amps = ((ADCVoltage - currentSensorOffset) / sensitivity);
+  return amps;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/********* SD Card functions **********/
 //SD-Card Inicialization
 void initSDCard(){
   if(!SD.begin()){
@@ -328,7 +413,6 @@ void printDirectory(const char * dirname, uint8_t levels)
   }
   file.close();
 
- 
 }
 
 //Download a file from the SD, it is called in void SD_dir()
